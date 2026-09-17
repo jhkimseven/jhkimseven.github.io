@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WorkChat - 사내 실시간 메신저</title>
+  <!-- Supabase JS 라이브러리 추가 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     /* CSS Styles */
     :root {
@@ -477,6 +479,16 @@
 
   <!-- JS Logic -->
   <script>
+    // TODO: 아래 KEY를 본인의 Supabase anon key로 변경하세요.
+    const SUPABASE_URL = 'https://wlofjkizagtwzclkxgax.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_EEucTB_jntxvAsoAXsAz_w_mKovniU_';
+    
+    // Supabase 클라이언트 초기화
+    let supabase = null;
+    if (window.supabase) {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+
     // 상태 관리 (인메모리)
     const state = {
       isLogged: false,
@@ -493,6 +505,8 @@
     const appView = document.getElementById('app-view');
     const googleLoginBtn = document.getElementById('google-login-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    const userNameEl = document.getElementById('user-name');
+    const userAvatarEl = document.getElementById('user-avatar');
     
     const menuItems = document.querySelectorAll('.menu-item');
     const headerTitle = document.getElementById('header-title');
@@ -564,34 +578,59 @@
       msgInput.value = '';
       msgInput.focus();
 
-      // TODO: Supabase 연동 - supabase.from('messages').insert() 및 Realtime 채널 브로드캐스팅
-      // 예: await supabase.from('messages').insert([{ text: text, sender: '게스트', created_at: new Date() }])
+      // TODO: Supabase 연동 - 실시간 DB INSERT
+      // 예: await supabase.from('messages').insert([{ text: text, sender: state.currentUser?.name, created_at: new Date() }])
     }
 
-    // 이벤트 리스너: 로그인
-    googleLoginBtn.addEventListener('click', () => {
-      // TODO: Supabase 연동 - supabase.auth.signInWithOAuth({ provider: 'google' }) 호출부
-      
-      // 임시 로그인 처리
-      state.isLogged = true;
-      state.currentUser = { name: "게스트", email: "guest@company.com" };
-      
-      authView.style.display = 'none';
-      appView.style.display = 'flex';
-      
-      // 초기 메시지 렌더링
-      renderMessages();
+    // Supabase 세션 체크 및 UI 업데이트 (onAuthStateChange)
+    if (supabase) {
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+          state.isLogged = true;
+          // 구글 로그인 시 제공되는 이름 사용
+          const userName = session.user.user_metadata?.full_name || "게스트";
+          state.currentUser = { name: userName, email: session.user.email };
+          
+          userNameEl.textContent = state.currentUser.name;
+          userAvatarEl.textContent = state.currentUser.name.charAt(0).toUpperCase();
+          
+          authView.style.display = 'none';
+          appView.style.display = 'flex';
+          renderMessages();
+        } else {
+          state.isLogged = false;
+          state.currentUser = null;
+          
+          appView.style.display = 'none';
+          authView.style.display = 'flex';
+        }
+      });
+    }
+
+    // 이벤트 리스너: 구글 로그인
+    googleLoginBtn.addEventListener('click', async () => {
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            // 아래 주소는 현재 배포된 GitHub Pages 주소로 설정합니다.
+            redirectTo: 'https://jhkimseven.github.io/'
+          }
+        });
+        if (error) {
+          console.error("로그인 에러:", error);
+          alert("로그인 중 오류가 발생했습니다.");
+        }
+      } else {
+        alert("Supabase 클라이언트가 초기화되지 않았습니다. URL과 KEY를 확인해주세요.");
+      }
     });
 
     // 이벤트 리스너: 로그아웃
-    logoutBtn.addEventListener('click', () => {
-      // TODO: Supabase 연동 - supabase.auth.signOut() 세션 만료 처리부
-      
-      state.isLogged = false;
-      state.currentUser = null;
-      
-      appView.style.display = 'none';
-      authView.style.display = 'flex';
+    logoutBtn.addEventListener('click', async () => {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
     });
 
     // 이벤트 리스너: 메뉴 전환
